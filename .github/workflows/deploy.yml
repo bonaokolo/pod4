@@ -1,0 +1,68 @@
+name: Deploy POD4 Website
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      TF_VAR_key_name: ${{ secrets.EC2_KEY_NAME }}
+      TF_TOKEN_app_terraform_io: ${{ secrets.TFC_TOKEN }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up SSH key
+      run: |
+        echo "${{ secrets.EC2_KEY }}" > key.pem
+        chmod 600 key.pem
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Check EC2_INSTANCE_ID and Deploy
+      id: deploy_ec2
+      run: |
+        if [ -z "${{ secrets.EC2_INSTANCE_ID }}" ]; then
+          echo "No EC2_INSTANCE_ID provided. Creating new EC2 instance with Terraform Cloud."
+
+          cd terraform
+          terraform init
+          terraform apply -auto-approve
+
+          export INSTANCE_ID=$(terraform output -raw instance_id)
+          export INSTANCE_IP=$(terraform output -raw instance_ip)
+        else
+          echo "Using provided EC2 instance ID: ${{ secrets.EC2_INSTANCE_ID }}"
+          export INSTANCE_ID=${{ secrets.EC2_INSTANCE_ID }}
+          export INSTANCE_IP=$(aws ec2 describe-instances \
+            --instance-ids $INSTANCE_ID \
+            --query "Reservations[0].Instances[0].PublicIpAddress" \
+            --output text)
+        fi
+
+        echo "instance_ip=${INSTANCE_IP}" >> "$GITHUB_ENV"
+
+    - name: Install Nginx and Upload Website
+      run: |
+        ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@$INSTANCE_IP << 'EOF'
+          sudo apt update
+          sudo apt install -y nginx
+          sudo mkdir -p /var/www/html
+          sudo chown -R ubuntu:ubuntu /var/www/html
+        EOF
+
+        rsync -avz -e "ssh -i key.pem -o StrictHostKeyChecking=no" ./POD4/ ubuntu@$INSTANCE_IP:/var/www/html/
+
+    - name: Restart Nginx
+      run: |
+        ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@$INSTANCE_IP "sudo systemctl restart nginx"
