@@ -8,9 +8,11 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     env:
       TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
       TF_VAR_key_name: ${{ secrets.EC2_KEY_NAME }}
+      TF_VAR_private_key: ${{ secrets.EC2_KEY }}
       TF_VAR_existing_instance_id: ${{ secrets.EC2_INSTANCE_ID }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -50,11 +52,7 @@ jobs:
       - name: Get EC2 Public IP from Terraform Output
         id: get_ip
         run: |
-          IP=$(terraform output -raw instance_ip || echo "")
-          if [ -z "$IP" ]; then
-            echo "No public IP found. Exiting."
-            exit 1
-          fi
+          IP=$(terraform output -raw instance_ip)
           echo "INSTANCE_IP=$IP" >> $GITHUB_ENV
         working-directory: terraform
 
@@ -79,6 +77,7 @@ jobs:
           EOF
         env:
           EC2_KEY: ${{ secrets.EC2_KEY }}
+          INSTANCE_IP: ${{ env.INSTANCE_IP }}
 
       - name: Stop EC2 Instance
         run: |
