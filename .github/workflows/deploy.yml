@@ -8,8 +8,9 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     env:
-      TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}  # ✅ Use Terraform Cloud token
+      TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
 
     steps:
       - name: Checkout repository
@@ -22,14 +23,17 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
+        working-directory: terraform
 
       - name: Terraform Apply
         run: terraform apply -auto-approve
+        working-directory: terraform
 
       - name: Get EC2 Public IP from Terraform Output
         id: get_ip
         run: |
           echo "INSTANCE_IP=$(terraform output -raw instance_ip)" >> $GITHUB_ENV
+        working-directory: terraform
 
       - name: Wait for EC2 to be ready
         run: sleep 60
