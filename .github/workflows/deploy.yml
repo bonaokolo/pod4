@@ -18,6 +18,7 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+      AWS_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
 
     steps:
       - name: Checkout repository
@@ -54,20 +55,16 @@ jobs:
         id: get_ip
         run: |
           echo "Fetching instance IP..."
-          terraform output -raw instance_ip > ip.txt
-          IP=$(cat ip.txt | tr -d '\r\n')
+          IP=$(terraform output -raw instance_ip)
           echo "INSTANCE_IP=$IP" >> $GITHUB_ENV
         working-directory: terraform
-
-      - name: Debug Instance IP
-        run: echo "Instance IP is $INSTANCE_IP"
 
       - name: Wait for EC2 to be ready
         run: sleep 60
 
       - name: Deploy POD4 Website to EC2
         run: |
-          echo "$EC2_KEY" > key.pem
+          echo "$EC2_KEY" | base64 -d > key.pem
           chmod 600 key.pem
 
           rsync -avz -e "ssh -o StrictHostKeyChecking=no -i key.pem" ./POD4/ ubuntu@$INSTANCE_IP:/tmp/pod4/
