@@ -54,8 +54,13 @@ jobs:
         id: get_ip
         run: |
           echo "Fetching instance IP..."
-          echo "INSTANCE_IP=$(terraform output -raw instance_ip)" >> $GITHUB_ENV
+          terraform output -raw instance_ip > ip.txt
+          IP=$(cat ip.txt | tr -d '\r\n')
+          echo "INSTANCE_IP=$IP" >> $GITHUB_ENV
         working-directory: terraform
+
+      - name: Debug Instance IP
+        run: echo "Instance IP is $INSTANCE_IP"
 
       - name: Wait for EC2 to be ready
         run: sleep 60
