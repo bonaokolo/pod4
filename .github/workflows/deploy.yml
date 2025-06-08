@@ -10,7 +10,9 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}  # Correct token env var for Terraform Cloud
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}  # Correct Terraform Cloud token env var
+      TF_VAR_key_name: ${{ secrets.EC2_KEY_NAME }}            # Provide Terraform input variable 'key_name'
+      TF_VAR_existing_instance_id: ${{ secrets.EC2_INSTANCE_ID }} # Provide other needed input variable if any
 
     steps:
       - name: Checkout repository
