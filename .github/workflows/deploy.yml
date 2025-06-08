@@ -2,83 +2,71 @@ name: Deploy POD4 Website
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     env:
       TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
-      TF_VAR_key_name: ${{ secrets.EC2_KEY_NAME }}
-      TF_VAR_private_key: ${{ secrets.EC2_KEY }}
-      TF_VAR_existing_instance_id: ${{ secrets.EC2_INSTANCE_ID }}
+      TF_VAR_key_name: ${{ secrets.TF_VAR_KEY_NAME }}
+      TF_VAR_private_key: ${{ secrets.TF_VAR_PRIVATE_KEY }}
+      TF_VAR_existing_instance_id: ${{ secrets.TF_VAR_EXISTING_INSTANCE_ID }}
       TF_VAR_aws_region: ${{ secrets.AWS_DEFAULT_REGION }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+      EC2_KEY: ${{ secrets.EC2_KEY }}
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-      - name: Set up AWS CLI
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: 1.2.1
 
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.5.7
+    - name: Terraform Init
+      working-directory: terraform
+      run: terraform init
 
-      - name: Terraform Init
-        run: terraform init
-        working-directory: terraform
+    - name: Terraform Plan
+      working-directory: terraform
+      run: terraform plan
 
-      - name: Terraform Apply (Create or Use EC2)
-        run: terraform apply -auto-approve
-        working-directory: terraform
+    - name: Terraform Apply
+      working-directory: terraform
+      run: terraform apply -auto-approve
 
-      - name: Get EC2 Public IP from Terraform Output
-        id: get_ip
-        run: |
-          echo "Fetching instance IP..."
-          IP=$(terraform output -raw instance_ip 2>/dev/null | head -n 1)
-          echo "INSTANCE_IP=$IP" >> $GITHUB_ENV
-          echo "Public IP: $IP"
-        working-directory: terraform
+    - name: Get EC2 Public IP from Terraform Output
+      id: get_ip
+      working-directory: terraform
+      run: |
+        echo "Fetching instance IP..."
+        IP=$(terraform output -raw instance_ip)
+        echo "INSTANCE_IP=$IP" >> $GITHUB_ENV
+        echo "Public IP: $IP"
 
-      - name: Wait for EC2 to be ready
-        run: sleep 60
+    - name: Wait for EC2 to boot
+      run: sleep 60
 
-      - name: Deploy POD4 Website to EC2
-        run: |
-          echo "$EC2_KEY" | base64 -d > key.pem
-          chmod 600 key.pem
+    - name: Decode EC2 private key
+      run: |
+        echo "$EC2_KEY" | base64 -d > key.pem
+        chmod 600 key.pem
 
-          rsync -avz -e "ssh -o StrictHostKeyChecking=no -i key.pem" ./POD4/ ubuntu@$INSTANCE_IP:/tmp/pod4/
-
-          ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@$INSTANCE_IP << 'EOF'
-            if ! command -v nginx > /dev/null; then
-              sudo apt update
-              sudo apt install -y nginx
-            fi
-            sudo rm -rf /var/www/html/*
-            sudo mv /tmp/pod4/* /var/www/html/
-            sudo systemctl restart nginx
-          EOF
-        env:
-          EC2_KEY: ${{ secrets.EC2_KEY }}
-          INSTANCE_IP: ${{ env.INSTANCE_IP }}
-
-      - name: Stop EC2 Instance (Only if existing)
-        if: env.TF_VAR_existing_instance_id != ''
-        run: |
-          echo "Stopping instance ${{ secrets.EC2_INSTANCE_ID }}"
-          aws ec2 stop-instances --instance-ids ${{ secrets.EC2_INSTANCE_ID }}
-          aws ec2 wait instance-stopped --instance-ids ${{ secrets.EC2_INSTANCE_ID }}
-          echo "Instance stopped"
+    - name: Deploy website to EC2
+      run: |
+        rsync -avz -e "ssh -o StrictHostKeyChecking=no -i key.pem" ./POD4/ ubuntu@$INSTANCE_IP:/tmp/pod4/
+        
+        ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@$INSTANCE_IP << 'EOF'
+          if ! command -v nginx > /dev/null; then
+            sudo apt update
+            sudo apt install -y nginx
+          fi
+          sudo rm -rf /var/www/html/*
+          sudo mv /tmp/pod4/* /var/www/html/
+          sudo systemctl restart nginx
+        EOF
