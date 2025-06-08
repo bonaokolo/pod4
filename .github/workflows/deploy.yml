@@ -14,9 +14,10 @@ jobs:
       TF_VAR_key_name: ${{ secrets.EC2_KEY_NAME }}
       TF_VAR_private_key: ${{ secrets.EC2_KEY }}
       TF_VAR_existing_instance_id: ${{ secrets.EC2_INSTANCE_ID }}
-      TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
+      TF_VAR_aws_region: ${{ secrets.AWS_DEFAULT_REGION }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
 
     steps:
       - name: Checkout repository
@@ -27,7 +28,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
 
       - name: Start EC2 Instance
         run: |
@@ -52,8 +53,8 @@ jobs:
       - name: Get EC2 Public IP from Terraform Output
         id: get_ip
         run: |
-          IP=$(terraform output -raw instance_ip)
-          echo "INSTANCE_IP=$IP" >> $GITHUB_ENV
+          echo "Fetching instance IP..."
+          echo "INSTANCE_IP=$(terraform output -raw instance_ip)" >> $GITHUB_ENV
         working-directory: terraform
 
       - name: Wait for EC2 to be ready
