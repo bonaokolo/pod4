@@ -1,4 +1,4 @@
-variable "region" {
+variable "aws_region" {
   default = "us-east-1"
 }
 
@@ -18,7 +18,7 @@ variable "existing_instance_id" {
 }
 
 provider "aws" {
-  region = var.region
+  region = var.aws_region
 }
 
 resource "aws_instance" "web" {
