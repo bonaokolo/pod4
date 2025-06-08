@@ -8,6 +8,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}  # ✅ Use Terraform Cloud token
 
     steps:
       - name: Checkout repository
@@ -19,19 +21,13 @@ jobs:
           terraform_version: 1.5.7
 
       - name: Terraform Init
-        working-directory: terraform
         run: terraform init
 
       - name: Terraform Apply
-        working-directory: terraform
-        env:
-          TF_VAR_key_name: ${{ secrets.EC2_KEY_NAME }}
-          TF_VAR_existing_instance_id: ${{ secrets.EC2_INSTANCE_ID }}
         run: terraform apply -auto-approve
 
       - name: Get EC2 Public IP from Terraform Output
         id: get_ip
-        working-directory: terraform
         run: |
           echo "INSTANCE_IP=$(terraform output -raw instance_ip)" >> $GITHUB_ENV
 
@@ -43,16 +39,13 @@ jobs:
           echo "$EC2_KEY" > key.pem
           chmod 600 key.pem
 
-          # Copy website files to EC2
           rsync -avz -e "ssh -o StrictHostKeyChecking=no -i key.pem" ./POD4/ ubuntu@$INSTANCE_IP:/tmp/pod4/
 
-          # SSH and configure Nginx
           ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@$INSTANCE_IP << 'EOF'
             if ! command -v nginx > /dev/null; then
               sudo apt update
               sudo apt install -y nginx
             fi
-
             sudo rm -rf /var/www/html/*
             sudo mv /tmp/pod4/* /var/www/html/
             sudo systemctl restart nginx
