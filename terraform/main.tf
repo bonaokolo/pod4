@@ -6,6 +6,12 @@ variable "key_name" {
   type = string
 }
 
+variable "private_key" {
+  type        = string
+  sensitive   = true
+  description = "Private key content passed from GitHub Actions"
+}
+
 variable "existing_instance_id" {
   type    = string
   default = ""
@@ -30,7 +36,7 @@ resource "aws_instance" "web" {
     connection {
       type        = "ssh"
       user        = "ubuntu"
-      private_key = file("../key.pem")
+      private_key = var.private_key
       host        = self.public_ip
     }
   }
