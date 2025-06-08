@@ -42,9 +42,28 @@ resource "aws_instance" "web" {
   }
 }
 
+# Fetch details about existing EC2 instance
 data "aws_instance" "existing" {
   count       = var.existing_instance_id != "" ? 1 : 0
   instance_id = var.existing_instance_id
+}
+
+# Start existing instance if stopped (null_resource used for external action)
+resource "null_resource" "start_existing_instance" {
+  count = var.existing_instance_id != "" ? 1 : 0
+
+  provisioner "local-exec" {
+    command = <<EOT
+      STATUS=$(aws ec2 describe-instances --instance-ids ${var.existing_instance_id} --query "Reservations[0].Instances[0].State.Name" --output text)
+      echo "Instance state: $STATUS"
+      if [ "$STATUS" = "stopped" ]; then
+        echo "Starting instance ${var.existing_instance_id}"
+        aws ec2 start-instances --instance-ids ${var.existing_instance_id}
+        aws ec2 wait instance-running --instance-ids ${var.existing_instance_id}
+        echo "Instance started"
+      fi
+    EOT
+  }
 }
 
 output "instance_id" {

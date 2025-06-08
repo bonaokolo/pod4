@@ -8,16 +8,31 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     env:
       TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
       TF_VAR_key_name: ${{ secrets.EC2_KEY_NAME }}
       TF_VAR_existing_instance_id: ${{ secrets.EC2_INSTANCE_ID }}
-      TF_VAR_private_key: ${{ secrets.EC2_KEY }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: "us-east-1"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+
+      - name: Set up AWS CLI
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Start EC2 Instance
+        run: |
+          echo "Starting instance ${{ secrets.EC2_INSTANCE_ID }}"
+          aws ec2 start-instances --instance-ids ${{ secrets.EC2_INSTANCE_ID }}
+          aws ec2 wait instance-running --instance-ids ${{ secrets.EC2_INSTANCE_ID }}
+          echo "Instance is running"
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v2
@@ -35,7 +50,12 @@ jobs:
       - name: Get EC2 Public IP from Terraform Output
         id: get_ip
         run: |
-          echo "INSTANCE_IP=$(terraform output -raw instance_ip)" >> $GITHUB_ENV
+          IP=$(terraform output -raw instance_ip || echo "")
+          if [ -z "$IP" ]; then
+            echo "No public IP found. Exiting."
+            exit 1
+          fi
+          echo "INSTANCE_IP=$IP" >> $GITHUB_ENV
         working-directory: terraform
 
       - name: Wait for EC2 to be ready
@@ -59,3 +79,10 @@ jobs:
           EOF
         env:
           EC2_KEY: ${{ secrets.EC2_KEY }}
+
+      - name: Stop EC2 Instance
+        run: |
+          echo "Stopping instance ${{ secrets.EC2_INSTANCE_ID }}"
+          aws ec2 stop-instances --instance-ids ${{ secrets.EC2_INSTANCE_ID }}
+          aws ec2 wait instance-stopped --instance-ids ${{ secrets.EC2_INSTANCE_ID }}
+          echo "Instance stopped"
